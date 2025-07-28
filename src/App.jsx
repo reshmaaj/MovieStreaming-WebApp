@@ -1,5 +1,8 @@
 import React, { useEffect,useState } from 'react'
 import Search from './components/Search'
+import MovieCard from './components/MovieCard';
+import { useDebounce } from 'react-use';
+import { getTrendingMovies, updateSearchCount } from './appwrite'
 // import Spinner from './components/Spinner'
 
 const API_BASE_URL = "https://api.themoviedb.org/3"; //copy base url from tmdb api doc  
@@ -17,15 +20,21 @@ const App = () => {
    const [searchTerm, setsearchTerm] = useState('');
    const [errorMessage, setErrorMessage] = useState('');
    const [movieList, setMovieList] = useState([]);
+   const [trendingMovies, setTrendingMovies] = useState([]);
    const [isLoading, setIsLoading] = useState(false);
+   const [debouncedSearchTerm, setdebouncedSearchTerm] = useState('');
 
+//    Debounce the search term to prevent making too many API requests
+// By waiting for the user to stop typing for 500ms
+   useDebounce(() => setdebouncedSearchTerm(searchTerm),500, [searchTerm] )
 
-   const fetchMovies = async () => {
+   const fetchMovies = async (query = '') => {
 
     setIsLoading(true);
     setErrorMessage('');
     try{ //here we'll bring in the movies
-        const endpoint = `${API_BASE_URL}/discover/movie?sort_by=popularity.desc`;
+        const endpoint = query ? `${API_BASE_URL}/search/movie?query=${encodeURIComponent(query)}`
+        : `${API_BASE_URL}/discover/movie?sort_by=popularity.desc`;
         
         const response = await fetch(endpoint, API_OPTIONS); //fetch is used to get APIs from dataset n display on the website
 
@@ -46,6 +55,12 @@ const App = () => {
 
         // console.log(data)
         // alert(response);
+        
+        if(query && data.results.length > 0) {
+            await updateSearchCount(query, data.results[0]);
+
+        }
+        // updateSearchCount();
     }
     
     catch (error) {
@@ -58,8 +73,26 @@ const App = () => {
   
    }
 
+    const loadTrendingMovies = async () => {
+       try{
+           const movies = await getTrendingMovies();
+           setTrendingMovies(movies);
+       } catch (error) {
+           console.error(`Error fetching trending movies: ${error}`);
+        //    setErrorMessage('Error fetching trending movies.');
+   
+       }
+   }
+
+
    useEffect(() => {
-  fetchMovies(); //func to fetch all the movies from DB via API
+  fetchMovies(debouncedSearchTerm); //func to fetch all the movies from DB via API
+  
+}, [debouncedSearchTerm]);
+
+   useEffect(() => {
+  loadTrendingMovies(); //func to fetch trending movies from DB
+  
 }, []);
 
 
@@ -70,15 +103,28 @@ const App = () => {
             <div className="wrapper">
                 <header>
                     <img src='./hero.png' alt='heroimg'/>
-                    <h1>Find <span className="text-gradient">Movies</span> You'll Enjoy Without the Hassle </h1>
+                    <h1>Find <span className="text-gradient">Movies/Animes</span> You'll Enjoy Without the Hassle </h1>
 
                  <Search searchTerm={searchTerm} setsearchTerm={setsearchTerm} /> 
 
                 </header> 
-                 {/* <h1 className='text-white'>{searchTerm}</h1> */}
 
+                {trendingMovies.length > 0 && (
+                    <section className='trending'>
+                        <h2>Trending Movies</h2>
+                        <ul>
+                            {trendingMovies.map((movie, index) => (
+                                <li key={movie.$id}>
+                                    <p>{index + 1}</p>
+                                    <img src={movie.poster_url} alt={movie.title}/>
+
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                )}
                  <section className='all-movies'>
-                    <h2 className="mt-20">All Movies</h2>  
+                    <h2>New Release</h2>  
 
                     {isLoading ? (  //if loading
                         // <Spinner />
@@ -88,7 +134,10 @@ const App = () => {
                     ) : (  //neither loading nor showing error
                         <ul>
                             {movieList.map((movie) => (
-                                <p key={movie.id} className='text-white'>{movie.title}</p>
+                                // <p key={movie.id} className='text-white'>{movie.title}</p>
+                                // instead of simply showing the movie list, we can import directly to MovieCard.jsx file👇
+                                <MovieCard key={movie.id} movie={movie} />
+
                             ))}
 
                         </ul>
